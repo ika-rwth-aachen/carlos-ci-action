@@ -21,7 +21,9 @@ The action leverages [CARLOS](https://github.com/ika-rwth-aachen/carlos), an ope
   - [Publication](#publication)
   - [About](#about)
     - [Prerequisites](#prerequisites)
-    - [Basic Usage](#basic-usage)
+  - [Usage](#usage)
+    - [Single Scenario](#single-scenario)
+    - [Multiple Scenarios](#multiple-scenarios)
   - [Configuration Variables](#configuration-variables)
   - [Citation](#citation)
   - [Acknowledgements](#acknowledgements)
@@ -64,7 +66,90 @@ Additionally, the machines hosting the runners need to fulfill the following req
 3. Docker has access to GPU on host via vendor-specific tools ([Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) or [ROCm](https://github.com/ROCm/ROCm-docker/blob/master/quick-start.md))
 4. User that started the runner (either directly or as a [service](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/configuring-the-self-hosted-runner-application-as-a-service)) needs to be in the *docker* group (see [official documentation](https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user) for details)
 
-### Basic Usage
+## Usage
+
+This section demonstrates some of the common usecases for this action.
+Besides an explanation on how to approach these usecases, a reference implementation is also provided for each.
+
+### Single Scenario
+
+<details><summary>Example Workflow</summary>
+
+```yml
+name: example-workflow
+on: push
+jobs:
+
+  simulation-scenario-test:
+    runs-on: [self-hosted]  # Select self-hosted runner via tags
+    name: Run simulation test
+    steps:
+      - shell: bash # Allow containers access to display (UNSAFE FOR PRODUCTION!)
+        run: |
+              xhost +local:
+      - uses: ika-rwth-aachen/carlos-ci-action
+        with:
+          composefile-path: my-composefile.yml
+          remote-repository: BenediktHaas96/testing
+          remote-deploytoken: ${{ secrets.SSH_PRIVKEY }}
+          remote-composefile: remotefolder/remote-composefile.yml
+          scenario-folder-path: scenarios/
+          scenario-file-name: town10.xosc
+      - shell: bash # Block access to display again
+        run: |
+              xhost -local:
+```
+
+</details>
+
+### Multiple Scenarios
+
+<details><summary>Example Workflow</summary>
+
+```yml
+name: example-workflow
+on: push
+jobs:
+
+  generate-scenario-job-matrix:
+    runs-on: [self-hosted] # Hosted runners are also possible here
+    name: Generate scenario job matrix
+    outputs:
+      matrix: ${{ steps.generate.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: generate
+        uses: ./.github/actions/generate-job-matrix
+        with:
+          starting-point: ./scenarios # Folder where recursive search starts
+          query-string: '*.xosc' # Pattern that dynamically generates a job for each hit
+          exclude-string: '*/catalogs/*' # Patterns that should not be considered for job creation
+
+  simulation-scenario-tests:
+    needs: generate-scenario-job-matrix
+    runs-on: [self-hosted]
+    name: Run ${{ matrix.filename }} # Dynamic name generation for each resulting job
+    strategy:
+      fail-fast: false # Run all scenarios even when one fails
+      matrix: ${{ fromJson(needs.generate-scenario-job-matrix.outputs.matrix) }}
+    steps:
+      - shell: bash
+        run: |
+              xhost +local:
+      - uses: ika-rwth-aachen/carlos-ci-action
+        with:
+          composefile-path: my-composefile.yml
+          remote-repository: BenediktHaas96/testing
+          remote-deploytoken: ${{ secrets.SSH_PRIVKEY }}
+          remote-composefile: remotefolder/remote-composefile.yml
+          scenario-folder-path: ${{ matrix.filedir }} # Individual values for each dynamic job
+          scenario-file-name: ${{ matrix.filename }}
+      - shell: bash
+        run: |
+              xhost -local:
+```
+
+</details>
 
 ## Configuration Variables
 
