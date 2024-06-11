@@ -1,0 +1,15 @@
+name: run-scenario
+services:
+
+  carla-scenario-runner:
+    networks:
+      - sim-network
+    volumes:
+      - $SCENARIO_DIR:/scenarios
+    image: $SCENARIO_RUNNER_IMAGE
+    command: bash -ic "python ./scenario_runner.py --host $CARLA_HOSTNAME --openscenario /scenarios/$SCENARIO_FILE_NAME --output"
+
+networks:
+  sim-network:
+    name: $DOCKER_SIMNETWORK
+    external: true
