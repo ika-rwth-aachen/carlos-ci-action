@@ -68,39 +68,42 @@ Additionally, the machines hosting the runners need to fulfill the following req
 
 ## Configuration Variables
 
-- **`composefile-path`**
+- **`composefile-path`** (*default:* `${{ github.action_path }}/templates/carla-simulator.yml`)
+
   Path to Composefile that will be used directly or via merge with a remote file for the deployment
-  *default:* `${{ github.action_path }}/templates/carla-simulator.yml`
 - **`remote-repository`**
+
   Optional GitHub repository containing Composefiles ( org1/repo1 => github.com/org1/repo1 )
 - **`remote-composefile`**
+
   Path to the Composefile from the remote repository which should be downloaded
-- **`remote-path`**
+- **`remote-path`** (*default:* `./rendercompose-remote/`)
+  
   Path relative to working directory where the remote files will be placed
-  *default:* `./rendercompose-remote/`
 - **`remote-deploykey`**
+
   [Deploy key](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys) that will be used to access the remote repository
-- **`rendered-composefile`**
+- **`rendered-composefile`** (*default:* `./simulation-environment.yml`)
+
   Path where the rendered Composefile should be placed
-  *default:* `./simulation-environment.yml`
-- **`sim-startup-delaysecs`**
+- **`sim-startup-delaysecs`** (*default:* `10`)
+
   Seconds to wait after starting environment and before scenario execution
-  *default:* `10`
-- **`scenario-runner-image`**
+- **`scenario-runner-image`** (*default:* `rwthika/carla-scenario-runner:latest`)
+
   Docker image of the CARLA scenario runner
-  *default:* `rwthika/carla-scenario-runner:latest`
-- **`scenario-folder-path`**
+- **`scenario-folder-path`** (*required*)
+
   Path to folder containing the scenario(s) and optional catalogs subfolder
-  *required*
-- **`scenario-file-name`**
+- **`scenario-file-name`** (*required*)
+
   Filename of scenario
-  *required*
-- **`carla-hostname`**
+- **`carla-hostname`** (*default:* `carla-simulator`)
+
   Hostname of CARLA simulator that the scenario runner should connect to
-  *default:* `carla-simulator`
-- **`docker-network`**
+- **`docker-network`** (*default:* `carlos-ci-action_default`)
+
   Docker network that the scenario runner should attach to
-  *default:* `carlos-ci-action_default`
 
 ## Citation
 
