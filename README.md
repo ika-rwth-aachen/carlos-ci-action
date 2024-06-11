@@ -61,7 +61,8 @@ Additionally, the machines hosting the runners need to fulfill the following req
 
 1. Meets [CARLA system requirements](https://carla.readthedocs.io/en/latest/start_quickstart/#before-you-begin) (e.g. 6-8 GB GPU)
 2. Working installation of [Docker](https://www.docker.com/) and [Docker Compose](https://docs.docker.com/compose/) (installation of [Docker Desktop](https://docs.docker.com/desktop/) includes both)
-3. User that started the runner (either directly or as a [service](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/configuring-the-self-hosted-runner-application-as-a-service)) needs to be in the *docker* group (see [official documentation](https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user) for details)
+3. Docker has access to GPU on host via vendor-specific tools ([Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) or [ROCm](https://github.com/ROCm/ROCm-docker/blob/master/quick-start.md))
+4. User that started the runner (either directly or as a [service](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/configuring-the-self-hosted-runner-application-as-a-service)) needs to be in the *docker* group (see [official documentation](https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user) for details)
 
 ### Basic Usage
 
