@@ -1,0 +1,100 @@
+name: "carlos-ci-action"
+description: "Deploys a customizable, dockerized simulation environment to execute and evaluate OpenSCENARIO files"
+branding:
+  icon: "check-circle"
+  color: "gray-dark"
+
+inputs:
+  composefile-path:
+    description: "Path to Composefile that will be used directly or via merge with a remote file for the deployment"
+    default: "${{ github.action_path }}/templates/carla-simulator.yml"
+
+  remote-repository:
+    description: "Optional GitHub repository containing Composefiles ( org1/repo1 => https://github.com/org1/repo1 )"
+
+  remote-deploykey:
+    description: "Deploy key that will be used to access the remote repository"
+
+  remote-composefile:
+    description: "Path to the Composefile from the remote repository which should be downloaded"
+
+  remote-path:
+    description: "Path relative to working directory where the files will be placed"
+    default: "./rendercompose-remote/"
+
+  rendered-composefile:
+    description: "Path where the rendered Composefile should be placed"
+    default: "./simulation-environment.yml"
+
+  sim-startup-delaysecs:
+    description: "Seconds to wait after starting environment and before scenario execution"
+    default: "10"
+
+  scenario-runner-image:
+    description: "Docker image of the CARLA scenario runner"
+    default: "rwthika/carla-scenario-runner:latest"
+
+  scenario-folder-path:
+    description: "Path to folder containing the scenario(s) and optional catalogs subfolder"
+    required: true
+
+  scenario-file-name:
+    description: "Filename of scenario"
+    required: true
+
+  carla-hostname:
+    description: "Hostname of CARLA simulator that the scenario runner should connect to"
+    default: "carla-simulator"
+
+  docker-network:
+    description: "Docker network that the scenario runner should attach to"
+    default: "carlos-ci-action_default"
+
+runs:
+  using: "composite"
+  steps:
+
+    - name: Checkout remote Composefile
+      uses: actions/checkout@v4
+      if: ${{ inputs.remote-repository != '' }}
+      with:
+        repository: ${{ inputs.remote-repository }}
+        ssh-key: ${{ inputs.remote-deploykey }}
+        sparse-checkout: ${{ inputs.remote-composefile }}
+        sparse-checkout-cone-mode: false
+        path: ${{ inputs.remote-path }}
+
+    - name: Render simulation environment Composefile
+      shell: bash
+      env:
+        RENDERCOMPOSE_OUTFILE: ${{ inputs.rendered-composefile }}
+      run: ${GITHUB_ACTION_PATH}/scripts/render-composefile.sh ${{ inputs.remote-path }}${{ inputs.remote-composefile }} ${{ inputs.composefile-path }}
+
+    - name: Deploy simulation environment
+      shell: bash
+      run: docker compose -f ${{ inputs.rendered-composefile }} up -d
+
+    - name: Wait for environment startup
+      shell: bash
+      run: sleep ${{ inputs.sim-startup-delaysecs }}s
+
+    - name: Prepare scenario runner Composefile
+      shell: bash
+      run: docker compose -f ${GITHUB_ACTION_PATH}/templates/scenario-runner.yml config -o ${GITHUB_ACTION_PATH}/run-scenario.yml
+      env:
+        SCENARIO_RUNNER_IMAGE: ${{ inputs.scenario-runner-image }}
+        SCENARIO_DIR: ${{ inputs.scenario-folder-path }}
+        SCENARIO_FILE_NAME: ${{ inputs.scenario-file-name }}
+        CARLA_HOSTNAME: ${{ inputs.carla-hostname }}
+        DOCKER_SIMNETWORK: ${{ inputs.docker-network }}
+
+    - name: Run Scenario
+      shell: bash
+      run: docker compose -f ${GITHUB_ACTION_PATH}/run-scenario.yml run --rm carla-scenario-runner
+
+    - name: Destroy simulation environment
+      if: ${{ always() }}
+      shell: bash
+      run: |
+            docker compose -f ${{ inputs.rendered-composefile }} kill
+            docker compose -f ${{ inputs.rendered-composefile }} down
