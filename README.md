@@ -24,6 +24,7 @@ The action leverages [CARLOS](https://github.com/ika-rwth-aachen/carlos), an ope
   - [Usage](#usage)
     - [Single Scenario](#single-scenario)
     - [Multiple Scenarios](#multiple-scenarios)
+    - [Remote Composefiles](#remote-composefiles)
   - [Configuration Variables](#configuration-variables)
   - [Citation](#citation)
   - [Acknowledgements](#acknowledgements)
@@ -65,6 +66,7 @@ Additionally, the machines hosting the runners need to fulfill the following req
 2. Working installation of [Docker](https://www.docker.com/) and [Docker Compose](https://docs.docker.com/compose/) (installation of [Docker Desktop](https://docs.docker.com/desktop/) includes both)
 3. Docker has access to GPU on host via vendor-specific tools ([Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) or [ROCm](https://github.com/ROCm/ROCm-docker/blob/master/quick-start.md))
 4. User that started the runner (either directly or as a [service](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/configuring-the-self-hosted-runner-application-as-a-service)) needs to be in the *docker* group (see [official documentation](https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user) for details)
+5. (*Optional*) If graphical output is required, the runner needs to have access to the display. For details, please refer to [this explanation](https://github.com/ika-rwth-aachen/carlos/tree/main/automated-testing#self-hosted-github-runner).
 
 ## Usage
 
@@ -72,6 +74,37 @@ This section demonstrates some of the common usecases for this action.
 Besides an explanation on how to approach these usecases, a reference implementation is also provided for each.
 
 ### Single Scenario
+
+Assume you want to run a single scenario in a simulation with graphical output, so that you could have visual feedback on what is happening during scenario execution.
+Achieving this in a simulation environment following the CARLOS framework is incredibly simple with this action.
+First, you need to prepare a simple Composefile to define your simulation environment:
+
+<details><summary>my-composefile.yml</summary>
+
+```yml
+name: carlos-ci-action
+services:
+  carla-simulator:
+    deploy: # Needed for container access to Nvidia GPU
+      resources:
+          reservations:
+            devices:
+              - driver: nvidia
+                count: 1
+                capabilities: [gpu]
+    privileged: True
+    environment:
+      DISPLAY: $DISPLAY # Needed for container access to display
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix # Needed for container access to display
+    image: rwthika/carla-simulator:server
+    command: bash -ic './CarlaUE4.sh -nosound'
+```
+
+</details>
+
+The Composefile shown only specifies a single service that will be started as part of the simulation environment, the simulator itself.
+This specification can now be used when integrating this action:
 
 <details><summary>Example Workflow</summary>
 
@@ -84,25 +117,50 @@ jobs:
     runs-on: [self-hosted]  # Select self-hosted runner via tags
     name: Run simulation test
     steps:
-      - shell: bash # Allow containers access to display (UNSAFE FOR PRODUCTION!)
-        run: |
+      - shell: bash
+        run: | # Allow containers access to display (UNSAFE FOR PRODUCTION!)
               xhost +local:
       - uses: ika-rwth-aachen/carlos-ci-action
         with:
-          composefile-path: my-composefile.yml
-          remote-repository: BenediktHaas96/testing
-          remote-deploytoken: ${{ secrets.SSH_PRIVKEY }}
-          remote-composefile: remotefolder/remote-composefile.yml
-          scenario-folder-path: scenarios/
-          scenario-file-name: town10.xosc
-      - shell: bash # Block access to display again
-        run: |
+          composefile-path: my-composefile.yml # Path to environment Composefile
+          scenario-folder-path: scenarios/ # Path to scenarios
+          scenario-file-name: town10.xosc # Filename of scenario
+      - shell: bash
+        run: | # Block access to display again
               xhost -local:
 ```
 
 </details>
 
 ### Multiple Scenarios
+
+For this usecase, assume you want to execute multiple scenarios which are placed in a common folder.
+Additionally, the simulation should now have no graphical output to lower resource consumption and speed up the entire process.
+You can make a slight modification to the environment Composefile from before:
+
+<details><summary>my-composefile.yml</summary>
+
+```yml
+name: carlos-ci-action
+services:
+  carla-simulator:
+    deploy: # Needed for container access to Nvidia GPU
+      resources:
+          reservations:
+            devices:
+              - driver: nvidia
+                count: 1
+                capabilities: [gpu]
+    privileged: True
+    image: rwthika/carla-simulator:server
+    command: bash -ic './CarlaUE4.sh -nosound -RenderOffScreen' # New flag to avoid graphical output
+```
+
+</details>
+
+Just like before, the Composefile includes just the simulator as its only service.
+To dynamically create CI jobs for each of the scenarios contained in a specified folder, you could use the custom [generate-job-matrix](https://github.com/ika-rwth-aachen/carlos/tree/main/.github/actions/generate-job-matrix) action we provided in the [CARLOS repository](https://github.com/ika-rwth-aachen/carlos).
+A workflow using that action could look like this:
 
 <details><summary>Example Workflow</summary>
 
@@ -119,7 +177,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: generate
-        uses: ./.github/actions/generate-job-matrix
+        uses: ./.github/actions/generate-job-matrix # Path to custom action depends on your setup
         with:
           starting-point: ./scenarios # Folder where recursive search starts
           query-string: '*.xosc' # Pattern that dynamically generates a job for each hit
@@ -133,20 +191,67 @@ jobs:
       fail-fast: false # Run all scenarios even when one fails
       matrix: ${{ fromJson(needs.generate-scenario-job-matrix.outputs.matrix) }}
     steps:
-      - shell: bash
-        run: |
-              xhost +local:
       - uses: ika-rwth-aachen/carlos-ci-action
         with:
           composefile-path: my-composefile.yml
-          remote-repository: BenediktHaas96/testing
-          remote-deploytoken: ${{ secrets.SSH_PRIVKEY }}
-          remote-composefile: remotefolder/remote-composefile.yml
           scenario-folder-path: ${{ matrix.filedir }} # Individual values for each dynamic job
           scenario-file-name: ${{ matrix.filename }}
-      - shell: bash
-        run: |
-              xhost -local:
+```
+
+</details>
+
+### Remote Composefiles
+
+The last usecase utilizes the action's capability to use environment Composefiles stored in a separate repository and merge that with your custom Composefile.
+This could be used to extract commonly used parts to a simulation environment so that you would only need to include it and override or extend where needed.
+Assume you have stored the Composefile from before in a different repository and now want to include and modify it for your pipeline.
+You could write a Composefile like this:
+
+<details><summary>my-modifications.yml</summary>
+
+```yml
+services:
+  carla-simulator: # Modify existing services
+    privileged: True
+    environment: # Add new configuration
+      EXPERIMENTAL_FEATURES: enabled
+    image: rwthika/carla-simulator:experimental # Override existing configuration
+
+  carla-ros-bridge: # Extend with additional services
+    image: rwthika/carla-ros-bridge
+    depends_on:
+      carla-simulator:
+        condition: service_healthy
+    volumes:
+      - ./launch/demo.launch.py:/demo.launch.py
+    command: bash -ic "ros2 launch /demo.launch.py"
+```
+
+</details>
+
+To access remote repositories and the Composefiles contained within, you need to make sure you are authorized to do so.
+One possibility is to set up a [Deploy key](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys) in the remote repository which you then set as a [Secret](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions) in your repository.
+The resulting workflow could look like this:
+
+<details><summary>Example Workflow</summary>
+
+```yml
+name: example-workflow
+on: push
+jobs:
+
+  simulation-scenario-test:
+    runs-on: [self-hosted]
+    name: Run simulation test
+    steps:
+      - uses: ika-rwth-aachen/carlos-ci-action
+        with:
+          composefile-path: my-modifications.yml # Specify local file
+          remote-repository: BenediktHaas96/testing # Specify remote repository
+          remote-deploykey: ${{ secrets.SSH_PRIVKEY }} # Use secret for authentication
+          remote-composefile: remotefolder/my-composefile.yml
+          scenario-folder-path: scenarios/
+          scenario-file-name: town10.xosc
 ```
 
 </details>
