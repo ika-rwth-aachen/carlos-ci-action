@@ -20,7 +20,6 @@ inputs:
 
   remote-path:
     description: "Path relative to working directory where the files will be placed"
-    default: "./rendercompose-remote/"
 
   rendered-composefile:
     description: "Path where the rendered Composefile should be placed"
