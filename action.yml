@@ -7,7 +7,7 @@ branding:
 inputs:
   composefile-path:
     description: "Path to Composefile that will be used directly or via merge with a remote file for the deployment"
-    default: "${{ github.action_path }}/templates/carla-simulator.yml"
+    default: "${GITHUB_ACTION_PATH}/templates/carla-simulator.yml"
 
   remote-repository:
     description: "Optional GitHub repository containing Composefiles ( org1/repo1 => https://github.com/org1/repo1 )"
